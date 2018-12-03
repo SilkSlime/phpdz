@@ -1,0 +1,134 @@
+////////checkrate.php////////
+<?php
+$conn = mysqli_connect($dbservername, $dbusername, $dbpassword, $dbname);
+$request = "SELECT * FROM `ratings` WHERE `user_id`=\"$user_id\" and `product_id`=\"$product_id\"";
+$result = mysqli_query($conn, $request);
+if (mysqli_num_rows($result) > 0) {
+    $rated = true;
+} else {
+    $rated = false;
+}?>
+////////checkregister.php////////
+<?php
+$usernamepattern = "/^[A-Za-z][A-Za-z0-9_]{5,}/";
+$paspattern = "/(?=^.{8,}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])(?=.*[,.!?:;\-%$#@&*^|\/\\~[\]{}]))^.*/";
+//Validate email
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $errors[] = "Email is bad!";
+}
+//Validate username
+if (!preg_match($usernamepattern, $username)) {
+    $errors[] = "Username is bad!";
+}
+//Validate password
+if (!preg_match($paspattern, $pass)) {
+    $errors[] = "Password is bad!";
+}
+if ($pass != $pass2) {
+    $errors[] = "Passwords are not equal!";
+}?>
+////////comment.php////////
+<?php
+$request = "INSERT INTO `comments` (`product_id`, `user_id`, `comment`, `username`) VALUES ($product_id, $user_id, \"$comment\", \"$username\");";
+$result = mysqli_query($conn, $request);
+////////func.php////////
+<?php
+function alert($msg, $type="danger") {
+    echo "
+    <div class=\"alert alert-$type mt-1 md-1\">
+        $msg
+    </div>
+    ";
+}
+function submit_input($msg, $form="form") {
+    echo "<input class=\"btn btn-outline-primary btn-block\" type=\"submit\" value=\"$msg\" form=\"$form\">";
+}
+function post($key){
+    return $_POST[$key];
+}
+function redirect($to, $sec=0) {
+    header("Refresh:$sec; url=$to");
+}?>
+////////getcomments.php////////
+<?php
+echo "<ul class=\"list-group list-group-flush text-left\">";
+$request = "SELECT * FROM `comments` WHERE `product_id` = $product_id;";
+$result = mysqli_query($conn, $request);
+while ($row = mysqli_fetch_assoc($result)) {
+    $author = $row["username"];
+    $comment = $row["comment"];
+    echo "<li class=\"list-group-item\"><b>$author: </b>$comment</li>";
+}
+echo "</ul>";?>
+////////prep.php////////
+<?php
+session_start();
+$issession = isset($_SESSION["logged"]);
+if ($issession) {
+    $logged = $_SESSION["logged"];
+    $user_id = $_SESSION["user_id"];
+    $username = $_SESSION["username"];
+    $admin_flg = $_SESSION["admin_flg"];
+}
+$method = $_SERVER["REQUEST_METHOD"];?>
+////////rate.php////////
+<?php
+$rate = post("rate");
+if ($rate > 5) {$rate = 5;}
+if ($rate!=0) {
+    if ($rated) {
+        $request = "UPDATE `ratings` SET `rating`=$rate WHERE `product_id`=$product_id and `user_id`=$user_id;";
+        $result = mysqli_query($conn, $request);
+    } else {
+        $request = "INSERT INTO `ratings` (`product_id`, `user_id`, `rating`) VALUES ($product_id, $user_id, $rate);";
+        $result = mysqli_query($conn, $request);
+    }
+
+    $request = "SELECT `rating` FROM `ratings` WHERE `product_id`=$product_id;";
+    $result = mysqli_query($conn, $request);
+
+    $sumrating = 0.0;
+    while ($row = mysqli_fetch_assoc($result)) {
+        $sumrating += (int)$row["rating"];
+    }
+    $sumrating = (double)$sumrating / (double)mysqli_num_rows($result);
+
+    $request = "UPDATE `items` SET `rating` = $sumrating WHERE `id` = $product_id;";
+    $result = mysqli_query($conn, $request);
+}
+$rated = true;?>
+////////upload.php////////
+<?php
+if ($product_id) {
+    $request = "UPDATE `items` SET `product` = \"$product\", `type` = \"$type\", `description` = \"$description\", `manufacturer` = \"$manufacturer\", `price` = $price WHERE `id`=$product_id;";
+    $result = mysqli_query($conn, $request);
+    if ($_FILES["image"]["name"]!="") {
+        $serverdir = '/home/silkslime/server/sem10/';
+        $uploadfile = 'product_img/' . $product_id;
+        $fullpath = $serverdir . $uploadfile;
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $fullpath)) {
+            $request = "UPDATE `items` SET `image` = \"$uploadfile\" WHERE `id` = $product_id;";
+            $result = mysqli_query($conn, $request);
+            alert("Success edited item!", "success");
+        }
+    }
+} else {
+//Insert product without image path
+    $request = "INSERT INTO `items` (`product`, `type`, `description`, `manufacturer`, `price`) VALUES (\"$product\", \"$type\", \"$description\", \"$manufacturer\", $price)";
+    $result = mysqli_query($conn, $request);
+//Get out product with id
+    $request = "SELECT * FROM `db_sem10`.`items` WHERE `product` = \"$product\" AND `type` = \"$type\" AND `description` = \"$description\" and `manufacturer` = \"$manufacturer\" and `price` = \"$price\"";
+    $result = mysqli_query($conn, $request);
+
+    $row = mysqli_fetch_assoc($result);
+    $id = $row["id"];
+
+    $serverdir = '/home/silkslime/server/sem10/';
+    $uploadfile = 'product_img/' . $id;
+    $fullpath = $serverdir . $uploadfile;
+    if (move_uploaded_file($_FILES['image']['tmp_name'], $fullpath)) {
+        $request = "UPDATE `db_sem10`.`items` SET `image` = \"$uploadfile\" WHERE `id` = $id";
+        $result = mysqli_query($conn, $request);
+        alert("Success added item!", "success");
+    }
+}?>
